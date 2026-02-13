@@ -1,4 +1,4 @@
-<!doctype html>
+ <!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
@@ -81,6 +81,9 @@
     .board{
       display:grid;
       grid-template-columns: repeat(9, 1fr);
+      /* ★ここが重要：行も9等分で固定（空マスが縮む問題の修正） */
+      grid-template-rows: repeat(9, 1fr);
+
       gap:0;
       width:min(90vw, 540px);
       aspect-ratio: 1 / 1;
@@ -97,6 +100,10 @@
       font-weight:900;
       user-select:none;
       -webkit-tap-highlight-color: transparent;
+
+      /* グリッド内で内容に引っ張られて潰れないように */
+      min-width:0;
+      min-height:0;
     }
     .cell:nth-child(odd){ background: var(--cellA); }
     .cell:nth-child(even){ background: var(--cellB); }
@@ -129,12 +136,11 @@
       transform-origin:center;
       filter: drop-shadow(0 1px 0 rgba(0,0,0,.35));
     }
-    /* 相手駒を上下反転 */
+    /* 相手駒を上下反転（表示だけ残す） */
     .piece.enemy{
       transform: rotate(180deg);
       opacity:.98;
     }
-    /* 先手/後手の色味（見分け用） */
     .piece.me{ color: var(--text); }
     .piece.enemy{ color: #fecaca; }
 
@@ -217,7 +223,7 @@
 <div class="wrap">
   <div class="top">
     <div class="title">🧠 将棋（Web・1人用）</div>
-    <div class="pill" id="pill">あなた（先手）の番</div>
+    <div class="pill" id="pill">一人プレイ（CPUなし）</div>
   </div>
 
   <div class="grid">
@@ -230,13 +236,13 @@
     </div>
 
     <div class="card side">
-      <h3 id="sideTitle">持ち駒（あなた）</h3>
+      <h3 id="sideTitle">持ち駒（先手=下側）</h3>
       <div class="hands" id="hands"></div>
       <div class="actions">
         <button class="action" id="cancel">選択解除</button>
         <button class="action warn" id="reset">リセット</button>
       </div>
-      <div class="hint" id="sideHint">CPUはランダムに指します（王手放置など未対応）。</div>
+      <div class="hint" id="sideHint">CPUは無効です。先手・後手どちらの駒も自由に動かせます（練習用）。</div>
     </div>
   </div>
 </div>
@@ -273,8 +279,8 @@
 
   function emptyHands(){
     return [
-      Object.fromEntries(HAND_TYPES.map(t=>[t,0])),
-      Object.fromEntries(HAND_TYPES.map(t=>[t,0]))
+      Object.fromEntries(HAND_TYPES.map(t=>[t,0])), // owner 0
+      Object.fromEntries(HAND_TYPES.map(t=>[t,0]))  // owner 1
     ];
   }
 
@@ -300,23 +306,17 @@
   // ====== UI State ======
   let board = initialBoard();
   let hands = emptyHands();
-  let turn = 0; // 0: you, 1: cpu
 
+  // 一人プレイ：どちらの駒でも選べるようにする（owner制限なし）
   let selected = null;       // {x,y}
   let targets = new Set();   // "x,y"
-  let selectedDrop = null;   // "P" etc
+  let selectedDrop = null;   // {t, owner} 例: {t:"P", owner:0}
   let dropTargets = new Set();
 
   const elBoard = document.getElementById("board");
   const elHands = document.getElementById("hands");
-  const pill = document.getElementById("pill");
-  const sideTitle = document.getElementById("sideTitle");
 
   function key(x,y){ return `${x},${y}`; }
-
-  function setPill(){
-    pill.textContent = (turn===0) ? "あなた（先手）の番" : "CPU（後手）の番";
-  }
 
   function clearSelection(){
     selected = null;
@@ -429,33 +429,27 @@
     const captured = board[dstY][dstX];
     if(captured){
       if(captured.t==="K"){
-        // 玉を取ったら終了扱い（簡易）
         board[srcY][srcX] = null;
         board[dstY][dstX] = moving;
         return {capturedKing:true};
       }
-      hands[moving.owner][captured.t] += 1; // 取った駒は成り解除扱い（種類だけ）
+      hands[moving.owner][captured.t] += 1; // 成りは解除（種類だけ）
     }
 
     board[srcY][srcX] = null;
     board[dstY][dstX] = moving;
 
-    // 成り
+    // 成り（ownerごとに確認を変える）
     if(!moving.promoted && PROMOTABLE.has(moving.t)){
       const can = inPromoZone(moving.owner, srcY) || inPromoZone(moving.owner, dstY);
       if(can){
         if(mustPromote(moving, dstY)){
           moving.promoted = true;
         }else{
-          if(moving.owner===0){
-            const base = KANJI_BASE[moving.t];
-            const prom = KANJI_PROM[moving.t] || base;
-            const ok = confirm(`${base} を ${prom} に成りますか？`);
-            if(ok) moving.promoted = true;
-          }else{
-            // CPUは高確率で成る
-            moving.promoted = (Math.random() < 0.7);
-          }
+          const base = KANJI_BASE[moving.t];
+          const prom = KANJI_PROM[moving.t] || base;
+          const ok = confirm(`${base} を ${prom} に成りますか？`);
+          if(ok) moving.promoted = true;
         }
       }
     }
@@ -465,71 +459,12 @@
   function applyDrop(t, x, y, owner){
     if(board[y][x]) return false;
     if(hands[owner][t] <= 0) return false;
-
-    // 打てない場所チェック
     if(!dropRankOk(t, owner, y)) return false;
     if(t==="P" && isNifu(owner, x)) return false;
 
     board[y][x] = {t, owner, promoted:false};
     hands[owner][t] -= 1;
     return true;
-  }
-
-  // ====== CPU Random ======
-  function allActions(owner){
-    const acts = [];
-    // moves
-    for(let y=0;y<9;y++) for(let x=0;x<9;x++){
-      const p = board[y][x];
-      if(!p || p.owner!==owner) continue;
-      const tg = pseudoTargetsFrom(x,y,p);
-      for(const k of tg){
-        const [tx,ty] = k.split(",").map(Number);
-        acts.push({kind:"move", a:{x,y}, b:{x:tx,y:ty}});
-      }
-    }
-    // drops
-    for(const t of HAND_TYPES){
-      if(hands[owner][t] <= 0) continue;
-      const tg = dropTargetsFor(t, owner);
-      for(const k of tg){
-        const [tx,ty] = k.split(",").map(Number);
-        acts.push({kind:"drop", a:{t}, b:{x:tx,y:ty}});
-      }
-    }
-    return acts;
-  }
-
-  function cpuMove(){
-    if(turn!==1) return;
-
-    const acts = allActions(1);
-    if(acts.length===0){
-      alert(`CPUは指せる手がありません（簡易終了）。`);
-      turn = 0;
-      setPill();
-      return;
-    }
-
-    const chosen = acts[Math.floor(Math.random()*acts.length)];
-
-    if(chosen.kind==="move"){
-      const res = applyMove(chosen.a.x, chosen.a.y, chosen.b.x, chosen.b.y);
-      render();
-      if(res && res.capturedKing){
-        alert("CPUの勝ち（玉を取られました）");
-        turn = 0;
-        setPill();
-        return;
-      }
-    }else{
-      applyDrop(chosen.a.t, chosen.b.x, chosen.b.y, 1);
-      render();
-    }
-
-    turn = 0;
-    setPill();
-    clearSelection(); // renderも含む
   }
 
   // ====== UI / Render ======
@@ -560,47 +495,62 @@
       }
     }
 
-    // hands (あなた側だけUI表示)
-    sideTitle.textContent = "持ち駒（あなた）";
+    // hands（練習用に両方の持ち駒を表示＆打てるようにする）
     elHands.innerHTML = "";
-    for(const t of HAND_TYPES){
-      const n = hands[0][t];
-      const btn = document.createElement("button");
-      btn.className = "handBtn";
-      if(selectedDrop===t) btn.classList.add("active");
-      btn.disabled = (turn!==0) || (n<=0);
 
-      const left = document.createElement("span");
-      left.textContent = `${KANJI_BASE[t]}`;
+    const makeHandSection = (owner) => {
+      const head = document.createElement("div");
+      head.style.marginTop = owner===0 ? "0" : "12px";
+      head.style.color = "var(--muted)";
+      head.style.fontSize = "12px";
+      head.style.fontWeight = "900";
+      head.textContent = owner===0 ? "持ち駒（先手=下側）" : "持ち駒（後手=上側）";
+      elHands.appendChild(head);
 
-      const right = document.createElement("span");
-      right.className = "mini";
-      right.textContent = `× ${n}`;
+      for(const t of HAND_TYPES){
+        const n = hands[owner][t];
+        const btn = document.createElement("button");
+        btn.className = "handBtn";
+        const active = selectedDrop && selectedDrop.t===t && selectedDrop.owner===owner;
+        if(active) btn.classList.add("active");
+        btn.disabled = (n<=0);
 
-      btn.appendChild(left);
-      btn.appendChild(right);
+        const left = document.createElement("span");
+        left.textContent = `${KANJI_BASE[t]}`;
 
-      btn.addEventListener("click", ()=>{
-        if(turn!==0) return;
-        if(hands[0][t] <= 0) return;
+        const right = document.createElement("span");
+        right.className = "mini";
+        right.textContent = `× ${n}`;
 
-        // 駒移動選択を解除して「打ち」モードへ
-        selected = null;
-        targets = new Set();
-        selectedDrop = (selectedDrop===t ? null : t);
-        dropTargets = selectedDrop ? dropTargetsFor(selectedDrop, 0) : new Set();
-        render();
-      });
+        btn.appendChild(left);
+        btn.appendChild(right);
 
-      elHands.appendChild(btn);
-    }
+        btn.addEventListener("click", ()=>{
+          if(hands[owner][t] <= 0) return;
 
-    setPill();
+          selected = null;
+          targets = new Set();
+
+          // 同じのをもう一回押したら解除
+          if(selectedDrop && selectedDrop.t===t && selectedDrop.owner===owner){
+            selectedDrop = null;
+            dropTargets = new Set();
+          }else{
+            selectedDrop = {t, owner};
+            dropTargets = dropTargetsFor(t, owner);
+          }
+          render();
+        });
+
+        elHands.appendChild(btn);
+      }
+    };
+
+    makeHandSection(0);
+    makeHandSection(1);
   }
 
   function onCellClick(e){
-    if(turn!==0) return;
-
     const x = Number(e.currentTarget.dataset.x);
     const y = Number(e.currentTarget.dataset.y);
     const k = key(x,y);
@@ -608,28 +558,18 @@
 
     // ---- drop mode ----
     if(selectedDrop){
-      if(!dropTargets.has(k)){
-        // 打てないマスなら何もしない（空白でも）
-        return;
-      }
-      const ok = applyDrop(selectedDrop, x, y, 0);
+      if(!dropTargets.has(k)) return;
+      const ok = applyDrop(selectedDrop.t, x, y, selectedDrop.owner);
       if(!ok) return;
 
-      // 手番交代
       selectedDrop = null;
       dropTargets = new Set();
       render();
-
-      turn = 1;
-      setPill();
-      clearSelection(); // 盤のハイライト消し
-      setTimeout(cpuMove, 250);
       return;
     }
 
     // ---- move mode ----
     if(selected){
-      // 既に選択中 -> ターゲットなら動かす
       if(targets.has(k)){
         const res = applyMove(selected.x, selected.y, x, y);
         selected = null;
@@ -637,36 +577,26 @@
         render();
 
         if(res && res.capturedKing){
-          alert("あなたの勝ち（玉を取りました）");
-          turn = 0;
-          setPill();
-          clearSelection();
-          return;
+          alert("玉を取りました（簡易終了）");
         }
-
-        // CPUへ
-        turn = 1;
-        setPill();
-        clearSelection();
-        setTimeout(cpuMove, 250);
         return;
       }
 
-      // 違う自駒をタップしたら選び直し
-      if(p && p.owner===0){
+      // 別の駒をタップしたら選び直し（owner制限なし）
+      if(p){
         selected = {x,y};
         targets = pseudoTargetsFrom(x,y,p);
         render();
         return;
       }
 
-      // それ以外は解除
+      // 空マス押したら解除
       clearSelection();
       return;
     }
 
-    // 未選択 -> 自分の駒を選ぶ
-    if(p && p.owner===0){
+    // 未選択 -> 駒を選ぶ（owner制限なし）
+    if(p){
       selected = {x,y};
       targets = pseudoTargetsFrom(x,y,p);
       render();
@@ -679,9 +609,7 @@
   document.getElementById("reset").addEventListener("click", ()=>{
     board = initialBoard();
     hands = emptyHands();
-    turn = 0;
     clearSelection();
-    setPill();
     render();
   });
 
