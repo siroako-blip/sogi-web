@@ -215,66 +215,22 @@
       margin:0 4px;
     }
 
-    .audioRow{
-      display:flex;
-      gap:10px;
-      align-items:center;
-      justify-content:flex-end;
-      flex-wrap:wrap;
-    }
-    .vol{
-      display:flex;
-      gap:8px;
-      align-items:center;
-      color:var(--muted);
-      font-weight:900;
-      font-size:12px;
-    }
-    input[type="range"]{ width:140px; }
-  </style>
-</head>
-<body>
-<div class="wrap">
-  <div class="top">
-    <div class="title">🧠 将棋（Web・ローカル2人 + BGM）</div>
+<div class="audioRow">
+  <div class="pill" id="pill">先手（あなた）の番</div>
+  
+  <label style="font-size:12px; cursor:pointer; background:#22315c; padding:4px 8px; border-radius:4px;">
+    📁 音楽を選択
+    <input type="file" id="fileInput" accept="audio/*" style="display:none;">
+  </label>
 
-    <div class="audioRow">
-      <div class="pill" id="pill">先手（あなた）の番</div>
-      <button class="action" id="bgmBtn">BGM: OFF</button>
-      <div class="vol">
-        音量
-        <input id="vol" type="range" min="0" max="1" step="0.01" value="0.35">
-      </div>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="card boardWrap">
-      <div class="board" id="board"></div>
-      <div class="hint" id="hint">
-        自分の手番の駒だけ動かせます。持ち駒をタップ→空マスで打てます。<br>
-        PCなら <span class="kbd">Esc</span> で選択解除。
-      </div>
-    </div>
-
-    <div class="card side">
-      <h3 id="sideTitle">持ち駒</h3>
-      <div class="hands" id="hands"></div>
-      <div class="actions">
-        <button class="action" id="cancel">選択解除</button>
-        <button class="action warn" id="reset">リセット</button>
-      </div>
-      <div class="hint" id="sideHint">
-        BGMはブラウザ仕様で「最初にボタンを押した後」だけ再生できます。
-      </div>
-    </div>
+  <button class="action" id="bgmBtn" disabled>BGM: OFF</button>
+  <div class="vol">
+    音量
+    <input id="vol" type="range" min="0" max="1" step="0.01" value="0.35">
   </div>
 </div>
 
-<!-- ★bgm.mp3 を同じフォルダに置いてください -->
-<audio id="bgm" loop preload="auto">
-  <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg" />
-</audio>
+<audio id="bgm" loop></audio>
 
 <script>
   // ====== Game Model ======
@@ -640,32 +596,67 @@
     if(e.key === "Escape") clearSelection();
   });
 
-  // ====== BGM ======
+// ====== BGM (修正版：ローカルファイル選択対応) ======
   const bgm = document.getElementById("bgm");
   const bgmBtn = document.getElementById("bgmBtn");
   const vol = document.getElementById("vol");
+  const fileInput = document.getElementById("fileInput");
   let bgmOn = false;
 
+  // 初期音量
   bgm.volume = Number(vol.value);
 
+  // 音量変更
   vol.addEventListener("input", ()=> {
     bgm.volume = Number(vol.value);
   });
 
+  // 1. ファイルが選ばれたら読み込む処理
+  fileInput.addEventListener("change", (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+
+    // 選ばれたファイルをブラウザ用のURLに変換してセット
+    const url = URL.createObjectURL(file);
+    bgm.src = url;
+    
+    // ボタンを押せるようにして、リセット
+    bgmBtn.disabled = false;
+    bgmBtn.textContent = "BGM: OFF (準備OK)";
+    bgmOn = false;
+    alert("音楽ファイルを読み込みました。「BGM: OFF」ボタンを押して再生してください。");
+  });
+
+  // 2. 再生/停止ボタンの処理
   bgmBtn.addEventListener("click", async ()=>{
+    // まだファイルが選ばれていない場合
+    if(!bgm.src){
+      alert("先に「📁 音楽を選択」からmp3ファイルなどを選んでください。");
+      return;
+    }
+
     try{
       if(!bgmOn){
-        await bgm.play(); // ブラウザの自動再生制限対策：ボタン操作で再生
+        // 再生を試みる
+        await bgm.play(); 
+        
+        // ★ここが重要：再生に成功したら文字を変える
         bgmOn = true;
         bgmBtn.textContent = "BGM: ON";
+        bgmBtn.classList.add("warn"); // オンだとわかるように色を変える（warnクラスを流用）
       }else{
+        // 停止する
         bgm.pause();
         bgmOn = false;
         bgmBtn.textContent = "BGM: OFF";
+        bgmBtn.classList.remove("warn");
       }
     }catch(err){
-      alert("BGMを再生できませんでした。もう一度押してください。");
       console.error(err);
+      alert("再生エラーが発生しました。別のファイルで試してみてください。");
+      // エラー時はオフ表示に戻す
+      bgmOn = false;
+      bgmBtn.textContent = "BGM: OFF";
     }
   });
 
@@ -674,4 +665,5 @@
 </script>
 </body>
 </html>
+
 
