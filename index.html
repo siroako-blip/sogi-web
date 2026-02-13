@@ -17,7 +17,6 @@
       --tgt:#38bdf8;
       --drop:#22c55e;
       --warn:#f59e0b;
-      --err:#ef4444;
       --btn:#0b1226;
     }
     *{box-sizing:border-box}
@@ -168,10 +167,7 @@
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
     }
-    .handBtn[disabled]{
-      opacity:.45;
-      cursor:not-allowed;
-    }
+    .handBtn[disabled]{ opacity:.45; cursor:not-allowed; }
     .handBtn.active{
       outline:3px solid var(--drop);
       border-color: rgba(34,197,94,.35);
@@ -306,9 +302,9 @@
   let hands = emptyHands();
   let turn = 0; // 0: you, 1: cpu
 
-  let selected = null; // {x,y}
-  let targets = new Set(); // "x,y"
-  let selectedDrop = null; // "P" etc
+  let selected = null;       // {x,y}
+  let targets = new Set();   // "x,y"
+  let selectedDrop = null;   // "P" etc
   let dropTargets = new Set();
 
   const elBoard = document.getElementById("board");
@@ -320,6 +316,14 @@
 
   function setPill(){
     pill.textContent = (turn===0) ? "あなた（先手）の番" : "CPU（後手）の番";
+  }
+
+  function clearSelection(){
+    selected = null;
+    targets = new Set();
+    selectedDrop = null;
+    dropTargets = new Set();
+    render();
   }
 
   // ====== Move Gen (pseudo-legal) ======
@@ -423,7 +427,13 @@
     if(!moving) return;
 
     const captured = board[dstY][dstX];
-    if(captured && captured.t!=="K"){
+    if(captured){
+      if(captured.t==="K"){
+        // 玉を取ったら終了扱い（簡易）
+        board[srcY][srcX] = null;
+        board[dstY][dstX] = moving;
+        return {capturedKing:true};
+      }
       hands[moving.owner][captured.t] += 1; // 取った駒は成り解除扱い（種類だけ）
     }
 
@@ -449,13 +459,20 @@
         }
       }
     }
+    return {capturedKing:false};
   }
 
   function applyDrop(t, x, y, owner){
-    if(board[y][x]) return;
-    if(hands[owner][t] <= 0) return;
+    if(board[y][x]) return false;
+    if(hands[owner][t] <= 0) return false;
+
+    // 打てない場所チェック
+    if(!dropRankOk(t, owner, y)) return false;
+    if(t==="P" && isNifu(owner, x)) return false;
+
     board[y][x] = {t, owner, promoted:false};
     hands[owner][t] -= 1;
+    return true;
   }
 
   // ====== CPU Random ======
@@ -485,6 +502,195 @@
 
   function cpuMove(){
     if(turn!==1) return;
+
     const acts = allActions(1);
     if(acts.length===0){
-      alert("CPUは指せる手がありません（簡易終了）。
+      alert(`CPUは指せる手がありません（簡易終了）。`);
+      turn = 0;
+      setPill();
+      return;
+    }
+
+    const chosen = acts[Math.floor(Math.random()*acts.length)];
+
+    if(chosen.kind==="move"){
+      const res = applyMove(chosen.a.x, chosen.a.y, chosen.b.x, chosen.b.y);
+      render();
+      if(res && res.capturedKing){
+        alert("CPUの勝ち（玉を取られました）");
+        turn = 0;
+        setPill();
+        return;
+      }
+    }else{
+      applyDrop(chosen.a.t, chosen.b.x, chosen.b.y, 1);
+      render();
+    }
+
+    turn = 0;
+    setPill();
+    clearSelection(); // renderも含む
+  }
+
+  // ====== UI / Render ======
+  function render(){
+    // board
+    elBoard.innerHTML = "";
+    for(let y=0;y<9;y++){
+      for(let x=0;x<9;x++){
+        const c = document.createElement("div");
+        c.className = "cell";
+        c.dataset.x = String(x);
+        c.dataset.y = String(y);
+
+        if(selected && selected.x===x && selected.y===y) c.classList.add("sel");
+        if(targets.has(key(x,y))) c.classList.add("tgt");
+        if(dropTargets.has(key(x,y))) c.classList.add("drop");
+
+        const p = board[y][x];
+        if(p){
+          const span = document.createElement("span");
+          span.className = "piece " + (p.owner===0 ? "me" : "enemy");
+          span.textContent = pieceText(p);
+          c.appendChild(span);
+        }
+
+        c.addEventListener("click", onCellClick);
+        elBoard.appendChild(c);
+      }
+    }
+
+    // hands (あなた側だけUI表示)
+    sideTitle.textContent = "持ち駒（あなた）";
+    elHands.innerHTML = "";
+    for(const t of HAND_TYPES){
+      const n = hands[0][t];
+      const btn = document.createElement("button");
+      btn.className = "handBtn";
+      if(selectedDrop===t) btn.classList.add("active");
+      btn.disabled = (turn!==0) || (n<=0);
+
+      const left = document.createElement("span");
+      left.textContent = `${KANJI_BASE[t]}`;
+
+      const right = document.createElement("span");
+      right.className = "mini";
+      right.textContent = `× ${n}`;
+
+      btn.appendChild(left);
+      btn.appendChild(right);
+
+      btn.addEventListener("click", ()=>{
+        if(turn!==0) return;
+        if(hands[0][t] <= 0) return;
+
+        // 駒移動選択を解除して「打ち」モードへ
+        selected = null;
+        targets = new Set();
+        selectedDrop = (selectedDrop===t ? null : t);
+        dropTargets = selectedDrop ? dropTargetsFor(selectedDrop, 0) : new Set();
+        render();
+      });
+
+      elHands.appendChild(btn);
+    }
+
+    setPill();
+  }
+
+  function onCellClick(e){
+    if(turn!==0) return;
+
+    const x = Number(e.currentTarget.dataset.x);
+    const y = Number(e.currentTarget.dataset.y);
+    const k = key(x,y);
+    const p = board[y][x];
+
+    // ---- drop mode ----
+    if(selectedDrop){
+      if(!dropTargets.has(k)){
+        // 打てないマスなら何もしない（空白でも）
+        return;
+      }
+      const ok = applyDrop(selectedDrop, x, y, 0);
+      if(!ok) return;
+
+      // 手番交代
+      selectedDrop = null;
+      dropTargets = new Set();
+      render();
+
+      turn = 1;
+      setPill();
+      clearSelection(); // 盤のハイライト消し
+      setTimeout(cpuMove, 250);
+      return;
+    }
+
+    // ---- move mode ----
+    if(selected){
+      // 既に選択中 -> ターゲットなら動かす
+      if(targets.has(k)){
+        const res = applyMove(selected.x, selected.y, x, y);
+        selected = null;
+        targets = new Set();
+        render();
+
+        if(res && res.capturedKing){
+          alert("あなたの勝ち（玉を取りました）");
+          turn = 0;
+          setPill();
+          clearSelection();
+          return;
+        }
+
+        // CPUへ
+        turn = 1;
+        setPill();
+        clearSelection();
+        setTimeout(cpuMove, 250);
+        return;
+      }
+
+      // 違う自駒をタップしたら選び直し
+      if(p && p.owner===0){
+        selected = {x,y};
+        targets = pseudoTargetsFrom(x,y,p);
+        render();
+        return;
+      }
+
+      // それ以外は解除
+      clearSelection();
+      return;
+    }
+
+    // 未選択 -> 自分の駒を選ぶ
+    if(p && p.owner===0){
+      selected = {x,y};
+      targets = pseudoTargetsFrom(x,y,p);
+      render();
+      return;
+    }
+  }
+
+  // ====== Buttons / Keys ======
+  document.getElementById("cancel").addEventListener("click", clearSelection);
+  document.getElementById("reset").addEventListener("click", ()=>{
+    board = initialBoard();
+    hands = emptyHands();
+    turn = 0;
+    clearSelection();
+    setPill();
+    render();
+  });
+
+  window.addEventListener("keydown", (e)=>{
+    if(e.key === "Escape") clearSelection();
+  });
+
+  // ====== boot ======
+  render();
+</script>
+</body>
+</html>
