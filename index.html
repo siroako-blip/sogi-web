@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>将棋（Web・ローカル2人 + 任意BGM）</title>
+  <title>将棋（Web・ローカル2人 + BGM）</title>
   <style>
     :root{
       --bg:#0f172a;
@@ -82,7 +82,9 @@
     .board{
       display:grid;
       grid-template-columns: repeat(9, 1fr);
+      /* ★空マスが縮むのを防ぐ：行も9等分で固定 */
       grid-template-rows: repeat(9, 1fr);
+
       gap:0;
       width:min(90vw, 540px);
       aspect-ratio: 1 / 1;
@@ -105,16 +107,25 @@
     .cell:nth-child(even){ background: var(--cellB); }
 
     .cell.sel::after{
-      content:""; position:absolute; inset:3px;
-      border:3px solid var(--sel); border-radius:10px; pointer-events:none;
+      content:"";
+      position:absolute; inset:3px;
+      border:3px solid var(--sel);
+      border-radius:10px;
+      pointer-events:none;
     }
     .cell.tgt::after{
-      content:""; position:absolute; inset:3px;
-      border:3px solid var(--tgt); border-radius:10px; pointer-events:none;
+      content:"";
+      position:absolute; inset:3px;
+      border:3px solid var(--tgt);
+      border-radius:10px;
+      pointer-events:none;
     }
     .cell.drop::after{
-      content:""; position:absolute; inset:8px;
-      border:3px solid var(--drop); border-radius:10px; pointer-events:none;
+      content:"";
+      position:absolute; inset:8px;
+      border:3px solid var(--drop);
+      border-radius:10px;
+      pointer-events:none;
     }
 
     .piece{
@@ -123,88 +134,116 @@
       transform-origin:center;
       filter: drop-shadow(0 1px 0 rgba(0,0,0,.35));
     }
-    .piece.enemy{ transform: rotate(180deg); opacity:.98; }
+    .piece.enemy{
+      transform: rotate(180deg);
+      opacity:.98;
+    }
     .piece.me{ color: var(--text); }
     .piece.enemy{ color: #fecaca; }
 
     /* Side */
     .side{padding:12px}
     .side h3{
-      margin:0 0 8px 0; font-size:12px; letter-spacing:.06em;
-      color:var(--muted); text-transform:uppercase;
+      margin:0 0 8px 0;
+      font-size:12px;
+      letter-spacing:.06em;
+      color:var(--muted);
+      text-transform:uppercase;
     }
-    .hands{ display:grid; gap:10px; }
+    .hands{
+      display:grid;
+      gap:10px;
+    }
     .handBtn{
-      width:100%; padding:12px 12px;
+      width:100%;
+      padding:12px 12px;
       border-radius:14px;
       border:1px solid rgba(148,163,184,.22);
       background: rgba(11,18,38,.92);
       color: var(--text);
-      font-weight:900; font-size:15px;
-      display:flex; justify-content:space-between; align-items:center;
-      cursor:pointer; -webkit-tap-highlight-color: transparent;
+      font-weight:900;
+      font-size:15px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      cursor:pointer;
+      -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
     }
     .handBtn[disabled]{ opacity:.45; cursor:not-allowed; }
-    .handBtn.active{ outline:3px solid var(--drop); border-color: rgba(34,197,94,.35); }
-    .mini{ font-size:12px; color:var(--muted); font-weight:800; }
-
+    .handBtn.active{
+      outline:3px solid var(--drop);
+      border-color: rgba(34,197,94,.35);
+    }
+    .mini{
+      font-size:12px;
+      color:var(--muted);
+      font-weight:800;
+    }
     .actions{
-      display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:12px;
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      margin-top:12px;
     }
     button.action{
-      padding:12px 12px; border-radius:14px; border:0;
-      background: var(--btn); color: var(--text);
-      font-weight:900; cursor:pointer;
+      padding:12px 12px;
+      border-radius:14px;
+      border:0;
+      background: var(--btn);
+      color: var(--text);
+      font-weight:900;
+      cursor:pointer;
     }
-    button.action[disabled]{ opacity:0.5; cursor:not-allowed; }
     button.action.warn{ background: #1b1a0b; color:#fde68a; }
     button.action:active{ transform: translateY(1px); }
 
-    .hint{ margin-top:10px; font-size:13px; color:#cbd5e1; line-height:1.45; }
+    .hint{
+      margin-top:10px;
+      font-size:13px;
+      color:#cbd5e1;
+      line-height:1.45;
+    }
     .kbd{
-      display:inline-block; padding:2px 8px; border-radius:8px;
-      background:rgba(11,18,38,.9); border:1px solid rgba(148,163,184,.22);
-      font-weight:900; color:var(--muted); margin:0 4px;
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:8px;
+      background:rgba(11,18,38,.9);
+      border:1px solid rgba(148,163,184,.22);
+      font-weight:900;
+      color:var(--muted);
+      margin:0 4px;
     }
 
-    /* Audio Control */
     .audioRow{
-      display:flex; gap:10px; align-items:center; justify-content:flex-end; flex-wrap:wrap;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:flex-end;
+      flex-wrap:wrap;
     }
     .vol{
-      display:flex; gap:8px; align-items:center;
-      color:var(--muted); font-weight:900; font-size:12px;
+      display:flex;
+      gap:8px;
+      align-items:center;
+      color:var(--muted);
+      font-weight:900;
+      font-size:12px;
     }
-    input[type="range"]{ width:100px; }
-
-    /* File Input Styling */
-    .fileLabel {
-      font-size:12px; cursor:pointer; 
-      background:var(--line); color:white;
-      padding:6px 12px; border-radius:99px;
-      font-weight: bold; display: flex; align-items: center; gap: 5px;
-    }
-    .fileLabel:hover { background: #334175; }
+    input[type="range"]{ width:140px; }
   </style>
 </head>
 <body>
 <div class="wrap">
   <div class="top">
-    <div class="title">🧠 将棋（Web・ローカル2人）</div>
+    <div class="title">🧠 将棋（Web・ローカル2人 + BGM）</div>
 
     <div class="audioRow">
       <div class="pill" id="pill">先手（あなた）の番</div>
-      
-      <label class="fileLabel">
-        🎵 音楽ファイルを選択
-        <input type="file" id="fileInput" accept="audio/*" style="display:none;">
-      </label>
-
-      <button class="action" id="bgmBtn" disabled>BGM: OFF</button>
-      
+      <button class="action" id="bgmBtn">BGM: OFF</button>
       <div class="vol">
-        音量 <input id="vol" type="range" min="0" max="1" step="0.01" value="0.35">
+        音量
+        <input id="vol" type="range" min="0" max="1" step="0.01" value="0.35">
       </div>
     </div>
   </div>
@@ -226,17 +265,21 @@
         <button class="action warn" id="reset">リセット</button>
       </div>
       <div class="hint" id="sideHint">
-        BGMを鳴らすには、上の「🎵 音楽ファイルを選択」からPC内のmp3ファイル等を選んでください。
+        BGMはブラウザ仕様で「最初にボタンを押した後」だけ再生できます。
       </div>
     </div>
   </div>
 </div>
 
-<audio id="bgm" loop></audio>
+<!-- ★bgm.mp3 を同じフォルダに置いてください -->
+<audio id="bgm" loop preload="auto">
+  <source src="bgm.mp3" type="audio/mpeg" />
+</audio>
 
 <script>
   // ====== Game Model ======
   const BOARD = 9;
+
   const KANJI_BASE = {K:"玉", R:"飛", B:"角", G:"金", S:"銀", N:"桂", L:"香", P:"歩"};
   const KANJI_PROM = {R:"龍", B:"馬", S:"全", N:"圭", L:"杏", P:"と"};
   const PROMOTABLE = new Set(["P","L","N","S","B","R"]);
@@ -250,6 +293,7 @@
 
   function inside(x,y){ return 0<=x && x<BOARD && 0<=y && y<BOARD; }
   function inPromoZone(owner, y){
+    // 先手(owner=0)が成れる相手陣: y=0..2、後手(owner=1)は y=6..8
     return owner===0 ? (y<=2) : (y>=6);
   }
   function mustPromote(p, dstY){
@@ -272,27 +316,30 @@
   function initialBoard(){
     const b = Array.from({length:BOARD}, ()=>Array.from({length:BOARD}, ()=>null));
     const back = ["L","N","S","G","K","G","S","N","L"];
-    // 後手
+
+    // 後手（上）
     for (let x=0;x<9;x++) b[0][x] = {t:back[x], owner:1, promoted:false};
     b[1][1] = {t:"B", owner:1, promoted:false};
     b[1][7] = {t:"R", owner:1, promoted:false};
     for (let x=0;x<9;x++) b[2][x] = {t:"P", owner:1, promoted:false};
-    // 先手
+
+    // 先手（下）
     for (let x=0;x<9;x++) b[6][x] = {t:"P", owner:0, promoted:false};
     b[7][1] = {t:"R", owner:0, promoted:false};
     b[7][7] = {t:"B", owner:0, promoted:false};
     for (let x=0;x<9;x++) b[8][x] = {t:back[x], owner:0, promoted:false};
+
     return b;
   }
 
   // ====== UI State ======
   let board = initialBoard();
   let hands = emptyHands();
-  let turn = 0; // 0:先手, 1:後手
+  let turn = 0; // 0: 先手, 1: 後手
 
-  let selected = null;
-  let targets = new Set();
-  let selectedDrop = null;
+  let selected = null;       // {x,y}
+  let targets = new Set();   // "x,y"
+  let selectedDrop = null;   // "P" etc（手番側の持ち駒）
   let dropTargets = new Set();
 
   const elBoard = document.getElementById("board");
@@ -314,10 +361,11 @@
     render();
   }
 
-  // ====== Move Gen ======
+  // ====== Move Gen (pseudo-legal) ======
   function pseudoTargetsFrom(x,y,p){
     const out = new Set();
     const f = (p.owner===0) ? -1 : 1;
+
     function add(nx,ny){
       if(!inside(nx,ny)) return;
       const q = board[ny][nx];
@@ -336,10 +384,13 @@
         nx+=dx; ny+=dy;
       }
     }
+
+    // 成った歩/香/桂/銀：金の動き
     if(p.promoted && (p.t==="P"||p.t==="L"||p.t==="N"||p.t==="S")){
       [[0,f],[-1,f],[1,f],[-1,0],[1,0],[0,-f]].forEach(([dx,dy])=>add(x+dx,y+dy));
       return out;
     }
+
     switch(p.t){
       case "P": add(x, y+f); break;
       case "K":
@@ -357,7 +408,9 @@
       case "N":
         add(x-1, y+2*f); add(x+1, y+2*f);
         break;
-      case "L": slide(0,f); break;
+      case "L":
+        slide(0,f);
+        break;
       case "B":
         slide(-1,-1); slide(1,-1); slide(-1,1); slide(1,1);
         if(p.promoted){ [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dx,dy])=>add(x+dx,y+dy)); }
@@ -399,20 +452,24 @@
     return out;
   }
 
-  // ====== Apply ======
+  // ====== Apply actions ======
   function applyMove(srcX,srcY,dstX,dstY){
     const moving = board[srcY][srcX];
     if(!moving) return {ok:false};
+
     const captured = board[dstY][dstX];
     if(captured){
       if(captured.t==="K"){
-        board[srcY][srcX] = null; board[dstY][dstX] = moving;
+        board[srcY][srcX] = null;
+        board[dstY][dstX] = moving;
         return {ok:true, capturedKing:true};
       }
       hands[moving.owner][captured.t] += 1;
     }
+
     board[srcY][srcX] = null;
     board[dstY][dstX] = moving;
+
     if(!moving.promoted && PROMOTABLE.has(moving.t)){
       const can = inPromoZone(moving.owner, srcY) || inPromoZone(moving.owner, dstY);
       if(can){
@@ -421,7 +478,8 @@
         }else{
           const base = KANJI_BASE[moving.t];
           const prom = KANJI_PROM[moving.t] || base;
-          if(confirm(`${base} を ${prom} に成りますか？`)) moving.promoted = true;
+          const ok = confirm(`${base} を ${prom} に成りますか？`);
+          if(ok) moving.promoted = true;
         }
       }
     }
@@ -433,20 +491,22 @@
     if(hands[owner][t] <= 0) return false;
     if(!dropRankOk(t, owner, y)) return false;
     if(t==="P" && isNifu(owner, x)) return false;
+
     board[y][x] = {t, owner, promoted:false};
     hands[owner][t] -= 1;
     return true;
   }
 
   function endTurn(){
-    clearSelection();
+    clearSelection(); // render含む
     turn = 1 - turn;
     setPill();
     render();
   }
 
-  // ====== Render ======
+  // ====== UI / Render ======
   function render(){
+    // board
     elBoard.innerHTML = "";
     for(let y=0;y<9;y++){
       for(let x=0;x<9;x++){
@@ -454,9 +514,11 @@
         c.className = "cell";
         c.dataset.x = String(x);
         c.dataset.y = String(y);
+
         if(selected && selected.x===x && selected.y===y) c.classList.add("sel");
         if(targets.has(key(x,y))) c.classList.add("tgt");
         if(dropTargets.has(key(x,y))) c.classList.add("drop");
+
         const p = board[y][x];
         if(p){
           const span = document.createElement("span");
@@ -464,10 +526,13 @@
           span.textContent = pieceText(p);
           c.appendChild(span);
         }
+
         c.addEventListener("click", onCellClick);
         elBoard.appendChild(c);
       }
     }
+
+    // hands（手番側のみ）
     sideTitle.textContent = (turn===0) ? "持ち駒（先手）" : "持ち駒（後手）";
     elHands.innerHTML = "";
     for(const t of HAND_TYPES){
@@ -476,18 +541,30 @@
       btn.className = "handBtn";
       if(selectedDrop===t) btn.classList.add("active");
       btn.disabled = (n<=0);
-      const left = document.createElement("span"); left.textContent = KANJI_BASE[t];
-      const right = document.createElement("span"); right.className = "mini"; right.textContent = `× ${n}`;
-      btn.appendChild(left); btn.appendChild(right);
+
+      const left = document.createElement("span");
+      left.textContent = `${KANJI_BASE[t]}`;
+      const right = document.createElement("span");
+      right.className = "mini";
+      right.textContent = `× ${n}`;
+
+      btn.appendChild(left);
+      btn.appendChild(right);
+
       btn.addEventListener("click", ()=>{
         if(hands[turn][t] <= 0) return;
-        selected = null; targets = new Set();
+
+        // 駒移動選択を解除して「打ち」モードへ
+        selected = null;
+        targets = new Set();
         selectedDrop = (selectedDrop===t ? null : t);
         dropTargets = selectedDrop ? dropTargetsFor(selectedDrop, turn) : new Set();
         render();
       });
+
       elHands.appendChild(btn);
     }
+
     setPill();
   }
 
@@ -497,92 +574,102 @@
     const k = key(x,y);
     const p = board[y][x];
 
+    // ---- drop mode ----
     if(selectedDrop){
       if(!dropTargets.has(k)) return;
-      if(applyDrop(selectedDrop, x, y, turn)){
-        render(); endTurn();
-      }
+      const ok = applyDrop(selectedDrop, x, y, turn);
+      if(!ok) return;
+
+      render();
+      endTurn();
       return;
     }
+
+    // ---- move mode ----
     if(selected){
       if(targets.has(k)){
         const res = applyMove(selected.x, selected.y, x, y);
         if(!res.ok) return;
+
         render();
+
         if(res.capturedKing){
-          alert(`${turn===0?"先手":"後手"} の勝ち（玉を取りました）`);
-          clearSelection(); return;
+          alert(`${turn===0 ? "先手" : "後手"} の勝ち（玉を取りました）`);
+          // 簡易終了：そのまま止めたいなら return;（今回は一旦選択解除のみ）
+          clearSelection();
+          return;
         }
-        endTurn(); return;
+
+        endTurn();
+        return;
       }
+
+      // 同じ手番の別駒なら選び直し
       if(p && p.owner===turn){
-        selected = {x,y}; targets = pseudoTargetsFrom(x,y,p);
-        render(); return;
+        selected = {x,y};
+        targets = pseudoTargetsFrom(x,y,p);
+        render();
+        return;
       }
-      clearSelection(); return;
+
+      // それ以外は解除
+      clearSelection();
+      return;
     }
+
+    // 未選択 -> 手番の駒だけ選べる
     if(p && p.owner===turn){
-      selected = {x,y}; targets = pseudoTargetsFrom(x,y,p);
-      render(); return;
+      selected = {x,y};
+      targets = pseudoTargetsFrom(x,y,p);
+      render();
+      return;
     }
   }
 
+  // ====== Buttons / Keys ======
   document.getElementById("cancel").addEventListener("click", clearSelection);
   document.getElementById("reset").addEventListener("click", ()=>{
-    board = initialBoard(); hands = emptyHands(); turn = 0;
-    clearSelection(); render();
+    board = initialBoard();
+    hands = emptyHands();
+    turn = 0;
+    clearSelection();
+    render();
   });
-  window.addEventListener("keydown", (e)=>{ if(e.key==="Escape") clearSelection(); });
 
-  // ====== BGM Logic (修正版) ======
+  window.addEventListener("keydown", (e)=>{
+    if(e.key === "Escape") clearSelection();
+  });
+
+  // ====== BGM ======
   const bgm = document.getElementById("bgm");
   const bgmBtn = document.getElementById("bgmBtn");
   const vol = document.getElementById("vol");
-  const fileInput = document.getElementById("fileInput");
   let bgmOn = false;
 
   bgm.volume = Number(vol.value);
-  vol.addEventListener("input", ()=>{ bgm.volume = Number(vol.value); });
 
-  // 1. ファイル選択時
-  fileInput.addEventListener("change", (e)=>{
-    const file = e.target.files[0];
-    if(!file) return;
-    const url = URL.createObjectURL(file);
-    bgm.src = url;
-    
-    // 準備OK状態にする
-    bgmOn = false;
-    bgmBtn.disabled = false;
-    bgmBtn.textContent = "BGM: OFF (準備OK)";
-    bgmBtn.classList.remove("warn");
+  vol.addEventListener("input", ()=> {
+    bgm.volume = Number(vol.value);
   });
 
-  // 2. ボタンクリック時
   bgmBtn.addEventListener("click", async ()=>{
-    if(!bgm.src){
-      alert("先に音楽ファイルを選択してください。"); return;
-    }
     try{
       if(!bgmOn){
-        await bgm.play();
+        await bgm.play(); // ブラウザの自動再生制限対策：ボタン操作で再生
         bgmOn = true;
         bgmBtn.textContent = "BGM: ON";
-        bgmBtn.classList.add("warn");
       }else{
         bgm.pause();
         bgmOn = false;
         bgmBtn.textContent = "BGM: OFF";
-        bgmBtn.classList.remove("warn");
       }
     }catch(err){
+      alert("BGMを再生できませんでした。もう一度押してください。");
       console.error(err);
-      alert("再生エラー。ファイルが破損しているか、ブラウザに対応していない形式です。");
-      bgmOn = false;
-      bgmBtn.textContent = "BGM: OFF";
     }
   });
 
+  // ====== boot ======
   render();
 </script>
 </body>
